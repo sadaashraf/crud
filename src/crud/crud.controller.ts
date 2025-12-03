@@ -5,7 +5,7 @@ import { UpdateCrudDto } from './dto/update-crud.dto';
 
 @Controller('crud')
 export class CrudController {
-  constructor(private readonly crudService: CrudService) {}
+  constructor(private readonly crudService: CrudService) { }
 
   @Post()
   create(@Body() createCrudDto: CreateCrudDto) {

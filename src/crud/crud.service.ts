@@ -1,11 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { CreateCrudDto } from './dto/create-crud.dto';
 import { UpdateCrudDto } from './dto/update-crud.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Crud } from './entities/crud.entity';
+import { Repository } from 'typeorm';
 
 @Injectable()
 export class CrudService {
+  constructor(
+    @InjectRepository(Crud)
+    private readonly crudRepository: Repository<Crud>,
+  ) { }
   create(createCrudDto: CreateCrudDto) {
-    return 'This action adds a new crud';
+    const crud = this.crudRepository.create(createCrudDto)
+    return this.crudRepository.save(crud)
   }
 
   findAll() {

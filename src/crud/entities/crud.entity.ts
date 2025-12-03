@@ -1,8 +1,9 @@
-import { Column } from "typeorm";
+import { Column, Entity, PrimaryColumn } from "typeorm";
 
+@Entity()
 export class Crud {
 
-  @Column()
+  @PrimaryColumn()
   id: number;
 
   @Column()
