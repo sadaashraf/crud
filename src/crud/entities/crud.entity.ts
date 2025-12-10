@@ -18,6 +18,4 @@ export class Crud {
   @Column()
   year: number;
 
-
-
 }

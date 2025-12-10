@@ -47,6 +47,5 @@ export class CrudService {
       message: "deleted successfully"
     }
 
-    // console.log('remove object', crud)
   }
 }

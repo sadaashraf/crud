@@ -17,8 +17,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
     }),
     CrudModule
   ],
-  // controllers: [],
-  // providers: [],
+
 })
 
 export class AppModule { }
