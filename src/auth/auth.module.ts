@@ -5,8 +5,9 @@ import { AuthService } from "./auth.services";
 import { AuthController } from "./auth.controller";
 import { JwtModule } from "@nestjs/jwt/dist/jwt.module";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { JwtService } from "@nestjs/jwt";
+
 import { JwtStrategy } from "./strategies/strategy";
+import { EmailModule } from "src/email/email.module";
 
 @Module({
   imports: [TypeOrmModule.forFeature([User]),
@@ -17,7 +18,9 @@ import { JwtStrategy } from "./strategies/strategy";
       secret: configService.get<string>('JWT_SECRET'),
       signOptions: { expiresIn: configService.get<number>('JWT_EXPIRES_IN') }
     })
-  })],
+  }),
+    EmailModule
+  ],
   providers: [AuthService, JwtStrategy],
   controllers: [AuthController],
 })

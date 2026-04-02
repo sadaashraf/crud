@@ -6,13 +6,15 @@ import { TypeOrmModule } from '@nestjs/typeorm/dist/typeorm.module';
 import { databaseConfig } from './config/database.config';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync(databaseConfig),
     AuthModule,
-    AdminModule
+    AdminModule,
+    EmailModule,
   ],
   controllers: [AppController],
   providers: [AppService],

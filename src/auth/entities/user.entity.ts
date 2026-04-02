@@ -6,15 +6,22 @@ export class User {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'enum', enum: Role, default: Role.USER })
-  role: Role;
-
   @Column({ unique: true })
   email: string;
 
   @Column()
   password: string;
 
-  @CreateDateColumn()
-  createdAt: Date;
+  @Column({ type: 'enum', enum: Role, default: Role.USER })
+  role: Role;
+
+  // ─── Email Verification ───────────────────────────────────────────
+  @Column({ default: false })
+  isEmailVerified: boolean;
+
+  @Column({ type: 'varchar', nullable: true })
+  emailVerificationToken: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  emailVerificationTokenExpiry: Date | null;
 }
