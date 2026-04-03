@@ -3,21 +3,19 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
-  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
-
 import { EmailService } from '../email/email.service';
 import { User } from './entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { Role } from 'src/utils/role.emu';
 import { LoginDto } from './dto/login.dto';
-import { JwtPayload } from './strategies/wt-payload.interface';
 import { ResendVerificationDto } from './dto/emailVerify.dto';
+import { JwtPayload } from './strategies/wt-payload.interface';
 
 @Injectable()
 export class AuthService {
@@ -28,22 +26,20 @@ export class AuthService {
     private readonly emailService: EmailService,
   ) { }
 
+  // ─── Called by JwtStrategy ────────────────────────────────────────────────────
   async validateUser(id: number): Promise<Omit<User, 'password'> | null> {
     const user = await this.userRepo.findOne({ where: { id } });
     if (!user) return null;
-
     const { password, ...result } = user;
-    return result; // { id, email, role, isEmailVerified, createdAt }
+    return result;
   }
 
-  // ─── Register ────────────────────────────────────────────────────────────────
+  // ─── Register ─────────────────────────────────────────────────────────────────
   async register(dto: RegisterDto) {
     const exists = await this.userRepo.findOne({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email already in use');
 
     const hashed = await bcrypt.hash(dto.password, 10);
-
-    // Generate verification token + expiry (24 hours)
     const verificationToken = uuidv4();
     const expiry = new Date();
     expiry.setHours(expiry.getHours() + 24);
@@ -57,17 +53,26 @@ export class AuthService {
       emailVerificationTokenExpiry: expiry,
     });
 
+    // ✅ FIX 2: Save user first, then try sending email
+    // If email fails → delete the user so registration is rolled back
     await this.userRepo.save(user);
 
-    // Send verification email via SendGrid
-    await this.emailService.sendVerificationEmail(dto.email, verificationToken);
+    try {
+      await this.emailService.sendVerificationEmail(dto.email, verificationToken);
+    } catch (error) {
+      // ✅ Email failed → remove the saved user so they must register again
+      await this.userRepo.remove(user);
+      throw new BadRequestException(
+        'Registration failed: could not send verification email. Please try again.',
+      );
+    }
 
     return {
-      message: 'Registration successful. Please check your email to verify your account.',
+      message: 'Registration successful. Please check your email to verify your account before logging in.',
     };
   }
 
-  // ─── Login ───────────────────────────────────────────────────────────────────
+  // ─── Login ────────────────────────────────────────────────────────────────────
   async login(dto: LoginDto) {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
@@ -75,7 +80,13 @@ export class AuthService {
     const match = await bcrypt.compare(dto.password, user.password);
     if (!match) throw new UnauthorizedException('Invalid credentials');
 
-    // Warn but still allow login — restrict features via EmailVerifiedGuard
+    // ✅ FIX 1: Block login if email is not verified
+    if (!user.isEmailVerified) {
+      throw new UnauthorizedException(
+        'Email not verified. Please check your inbox or request a new verification email at POST /auth/resend-verification',
+      );
+    }
+
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -84,10 +95,7 @@ export class AuthService {
 
     return {
       access_token: this.jwtService.sign(payload),
-      isEmailVerified: user.isEmailVerified,
-      message: user.isEmailVerified
-        ? 'Login successful'
-        : 'Login successful. Please verify your email to access all features.',
+      message: 'Login successful',
     };
   }
 
@@ -97,15 +105,9 @@ export class AuthService {
       where: { emailVerificationToken: token },
     });
 
-    if (!user) {
-      throw new BadRequestException('Invalid verification token');
-    }
+    if (!user) throw new BadRequestException('Invalid verification token');
+    if (user.isEmailVerified) return { message: 'Email is already verified' };
 
-    if (user.isEmailVerified) {
-      return { message: 'Email is already verified' };
-    }
-
-    // Check if token has expired
     if (
       !user.emailVerificationTokenExpiry ||
       new Date() > user.emailVerificationTokenExpiry
@@ -115,27 +117,24 @@ export class AuthService {
       );
     }
 
-    // Mark as verified and clear token
     user.isEmailVerified = true;
     user.emailVerificationToken = null;
     user.emailVerificationTokenExpiry = null;
     await this.userRepo.save(user);
 
-    return { message: 'Email verified successfully. You now have full access.' };
+    return { message: 'Email verified successfully. You can now log in.' };
   }
 
   // ─── Resend Verification ──────────────────────────────────────────────────────
   async resendVerification(dto: ResendVerificationDto) {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
 
-    // Always return success to prevent email enumeration attacks
     if (!user || user.isEmailVerified) {
       return {
         message: 'If this email exists and is unverified, a new verification email has been sent.',
       };
     }
 
-    // Generate a fresh token + expiry
     const verificationToken = uuidv4();
     const expiry = new Date();
     expiry.setHours(expiry.getHours() + 24);
@@ -144,7 +143,13 @@ export class AuthService {
     user.emailVerificationTokenExpiry = expiry;
     await this.userRepo.save(user);
 
-    await this.emailService.sendVerificationEmail(user.email, verificationToken);
+    try {
+      await this.emailService.sendVerificationEmail(user.email, verificationToken);
+    } catch {
+      throw new BadRequestException(
+        'Could not send verification email. Please try again later.',
+      );
+    }
 
     return {
       message: 'If this email exists and is unverified, a new verification email has been sent.',
