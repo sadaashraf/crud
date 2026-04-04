@@ -15,6 +15,7 @@ import { RegisterDto } from './dto/register.dto';
 import { Role } from 'src/utils/role.emu';
 import { LoginDto } from './dto/login.dto';
 import { ResendVerificationDto } from './dto/emailVerify.dto';
+import { ResetPasswordDto } from './dto/resetPassword.dto';
 import { JwtPayload } from './strategies/wt-payload.interface';
 
 @Injectable()
@@ -154,5 +155,57 @@ export class AuthService {
     return {
       message: 'If this email exists and is unverified, a new verification email has been sent.',
     };
+  }
+
+  // ─── Forgot Password ─────────────────────────────────────────────────────
+  async forgotPassword(email: string) {
+    const user = await this.userRepo.findOne({ where: { email } });
+
+    // Always return the same message to avoid user enumeration
+    const response = { message: 'If this email exists, a password reset link has been sent.' };
+    if (!user) return response;
+
+    const token = uuidv4();
+    const expiry = new Date();
+    expiry.setHours(expiry.getHours() + 1);
+
+    user.passwordResetToken = token;
+    user.passwordResetTokenExpiry = expiry;
+    await this.userRepo.save(user);
+
+    try {
+      await this.emailService.sendPasswordResetEmail(user.email, token);
+    } catch {
+      user.passwordResetToken = null;
+      user.passwordResetTokenExpiry = null;
+      await this.userRepo.save(user);
+      throw new BadRequestException('Could not send password reset email. Please try again later.');
+    }
+
+    return response;
+  }
+
+  // ─── Verify Reset Token ───────────────────────────────────────────────
+  async verifyResetToken(token: string) {
+    const user = await this.userRepo.findOne({ where: { passwordResetToken: token } });
+    if (!user || !user.passwordResetTokenExpiry || new Date() > user.passwordResetTokenExpiry) {
+      throw new BadRequestException('Invalid or expired password reset token');
+    }
+    return { message: 'Token is valid. You may now submit a new password.' };
+  }
+
+  // ─── Reset Password ───────────────────────────────────────────────────
+  async resetPassword(token: string, dto: ResetPasswordDto) {
+    const user = await this.userRepo.findOne({ where: { passwordResetToken: token } });
+    if (!user || !user.passwordResetTokenExpiry || new Date() > user.passwordResetTokenExpiry) {
+      throw new BadRequestException('Invalid or expired password reset token');
+    }
+
+    user.password = await bcrypt.hash(dto.password, 10);
+    user.passwordResetToken = null;
+    user.passwordResetTokenExpiry = null;
+    await this.userRepo.save(user);
+
+    return { message: 'Password has been reset successfully. You can now log in.' };
   }
 }

@@ -3,6 +3,7 @@ import { AuthService } from './auth.services';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ResendVerificationDto } from './dto/emailVerify.dto';
+import { ResetPasswordDto } from './dto/resetPassword.dto';
 import { JwtAuthGuard } from './strategies/jwt.auth.guard';
 import { CurrentUser } from './strategies/user.decorator';
 import { EmailVerifiedGuard } from './strategies/emailVerify.guard';
@@ -33,6 +34,24 @@ export class AuthController {
   @Post('resend-verification')
   resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto);
+  }
+
+  // POST /auth/forgot-password — send password reset link
+  @Post('forgot-password')
+  forgotPassword(@Body('email') email: string) {
+    return this.authService.forgotPassword(email);
+  }
+
+  // GET /auth/reset-password/:token — verify reset token
+  @Get('reset-password/:token')
+  verifyResetToken(@Param('token') token: string) {
+    return this.authService.verifyResetToken(token);
+  }
+
+  // POST /auth/reset-password/:token — set new password
+  @Post('reset-password/:token')
+  resetPassword(@Param('token') token: string, @Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(token, dto);
   }
 
   // ─── Example: route blocked until email is verified ───────────────────────
