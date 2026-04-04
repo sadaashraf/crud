@@ -4,31 +4,31 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeor
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
-  id: number;
+  id !: number;
 
   @Column({ unique: true })
-  email: string;
+  email !: string;
 
   @Column()
-  password: string;
+  password!: string;
 
   @Column({ type: 'enum', enum: Role, default: Role.USER })
-  role: Role;
+  role!: Role;
 
   // ─── Email Verification ───────────────────────────────────────────
   @Column({ default: false })
-  isEmailVerified: boolean;
+  isEmailVerified!: boolean;
 
   @Column({ type: 'varchar', nullable: true })
-  emailVerificationToken: string | null;
+  emailVerificationToken!: string | null;
 
   @Column({ type: 'timestamp', nullable: true })
-  emailVerificationTokenExpiry: Date | null;
+  emailVerificationTokenExpiry!: Date | null;
 
   // ─── Password Reset ───────────────────────────────────────────────
   @Column({ type: 'varchar', nullable: true })
-  passwordResetToken: string | null;
+  passwordResetToken!: string | null;
 
   @Column({ type: 'timestamp', nullable: true })
-  passwordResetTokenExpiry: Date | null;
+  passwordResetTokenExpiry!: Date | null;
 }
