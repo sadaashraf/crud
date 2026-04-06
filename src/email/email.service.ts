@@ -1,10 +1,15 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import sgMail from '@sendgrid/mail';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly fromEmail = process.env.SENDGRID_FROM_EMAIL || 'nayeemashraf92@gmail.com';
+  private readonly fromEmail =
+    process.env.SENDGRID_FROM_EMAIL || 'nayeemashraf92@gmail.com';
   private readonly appUrl = process.env.APP_URL || 'http://localhost:3000';
 
   constructor() {
@@ -16,7 +21,7 @@ export class EmailService {
 
     const fromEmail = process.env.SENDGRID_FROM_EMAIL;
     if (!fromEmail) {
-      throw new Error('SENDGRID_FROM_EMAIL is not set in .env');  // fail fast
+      throw new Error('SENDGRID_FROM_EMAIL is not set in .env'); // fail fast
     }
 
     sgMail.setApiKey(apiKey);
@@ -62,7 +67,9 @@ export class EmailService {
       this.logger.log(`Verification email sent to ${email}`);
     } catch (error) {
       this.logger.error(`Failed to send email to ${email}`, error);
-      throw new InternalServerErrorException('Failed to send verification email');
+      throw new InternalServerErrorException(
+        'Failed to send verification email',
+      );
     }
   }
 
@@ -106,8 +113,13 @@ export class EmailService {
       await sgMail.send(msg);
       this.logger.log(`Password reset email sent to ${email}`);
     } catch (error) {
-      this.logger.error(`Failed to send password reset email to ${email}`, error);
-      throw new InternalServerErrorException('Failed to send password reset email');
+      this.logger.error(
+        `Failed to send password reset email to ${email}`,
+        error,
+      );
+      throw new InternalServerErrorException(
+        'Failed to send password reset email',
+      );
     }
   }
 }

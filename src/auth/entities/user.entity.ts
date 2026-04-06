@@ -1,13 +1,18 @@
 import { Role } from 'src/utils/role.emu';
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+} from 'typeorm';
 
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
-  id !: number;
+  id!: number;
 
   @Column({ unique: true })
-  email !: string;
+  email!: string;
 
   @Column()
   password!: string;

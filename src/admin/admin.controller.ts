@@ -5,6 +5,7 @@ import {
   Patch,
   Param,
   Body,
+  Query,
   ParseIntPipe,
   UseGuards,
   HttpCode,
@@ -18,6 +19,8 @@ import { Role } from 'src/utils/role.emu';
 import { AdminService } from './admin.services';
 import { Roles } from 'src/auth/strategies/roles.decorator';
 import { CurrentUser } from 'src/auth/strategies/user.decorator';
+import { ActivityLogService } from 'src/activity-log/activity-log.service';
+import { ActivityAction } from 'src/activity-log/entities/activity-log.entity';
 
 class UpdateRoleDto {
   @IsEnum(Role)
@@ -27,7 +30,10 @@ class UpdateRoleDto {
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard) // All routes in this controller require auth
 export class AdminController {
-  constructor(private readonly adminService: AdminService) { }
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly activityLogService: ActivityLogService,
+  ) {}
 
   // ─── ADMIN ONLY ROUTES ───────────────────────────────────────────────────────
 
@@ -73,5 +79,22 @@ export class AdminController {
       message: `Welcome to the dashboard, ${user.email}`,
       role: user.role,
     };
+  }
+
+  // GET /admin/logs — view activity logs with optional filters and pagination
+  @Get('logs')
+  @Roles(Role.ADMIN)
+  getLogs(
+    @Query('userId') userId?: string,
+    @Query('action') action?: ActivityAction,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.activityLogService.findAll({
+      userId: userId ? parseInt(userId) : undefined,
+      action,
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+    });
   }
 }

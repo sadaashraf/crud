@@ -7,6 +7,7 @@ import { databaseConfig } from './config/database.config';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { EmailModule } from './email/email.module';
+import { ActivityLogModule } from './activity-log/activity-log.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { EmailModule } from './email/email.module';
     AuthModule,
     AdminModule,
     EmailModule,
+    ActivityLogModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -4,13 +4,12 @@ import { User } from 'src/auth/entities/user.entity';
 import { Role } from 'src/utils/role.emu';
 import { Repository } from 'typeorm';
 
-
 @Injectable()
 export class AdminService {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-  ) { }
+  ) {}
 
   // GET /admin/users — list all users (password excluded)
   async getAllUsers(): Promise<Omit<User, 'password'>[]> {

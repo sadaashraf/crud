@@ -10,6 +10,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { EmailService } from '../email/email.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
+import { ActivityAction } from '../activity-log/entities/activity-log.entity';
 import { User } from './entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { Role } from 'src/utils/role.emu';
@@ -25,6 +27,7 @@ export class AuthService {
     private readonly userRepo: Repository<User>,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    private readonly activityLogService: ActivityLogService,
   ) { }
 
   // ─── Called by JwtStrategy ────────────────────────────────────────────────────
@@ -36,7 +39,7 @@ export class AuthService {
   }
 
   // ─── Register ─────────────────────────────────────────────────────────────────
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, ipAddress?: string) {
     const exists = await this.userRepo.findOne({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email already in use');
 
@@ -54,34 +57,37 @@ export class AuthService {
       emailVerificationTokenExpiry: expiry,
     });
 
-    // ✅ FIX 2: Save user first, then try sending email
-    // If email fails → delete the user so registration is rolled back
     await this.userRepo.save(user);
 
     try {
       await this.emailService.sendVerificationEmail(dto.email, verificationToken);
     } catch (error) {
-      // ✅ Email failed → remove the saved user so they must register again
       await this.userRepo.remove(user);
       throw new BadRequestException(
         'Registration failed: could not send verification email. Please try again.',
       );
     }
 
+    await this.activityLogService.log(ActivityAction.REGISTER, user.id, ipAddress);
     return {
       message: 'Registration successful. Please check your email to verify your account before logging in.',
     };
   }
 
   // ─── Login ────────────────────────────────────────────────────────────────────
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, ipAddress?: string) {
     const user = await this.userRepo.findOne({ where: { email: dto.email } });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) {
+      await this.activityLogService.log(ActivityAction.FAILED_LOGIN, undefined, ipAddress);
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
     const match = await bcrypt.compare(dto.password, user.password);
-    if (!match) throw new UnauthorizedException('Invalid credentials');
+    if (!match) {
+      await this.activityLogService.log(ActivityAction.FAILED_LOGIN, user.id, ipAddress);
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
-    // ✅ FIX 1: Block login if email is not verified
     if (!user.isEmailVerified) {
       throw new UnauthorizedException(
         'Email not verified. Please check your inbox or request a new verification email at POST /auth/resend-verification',
@@ -94,6 +100,7 @@ export class AuthService {
       role: user.role,
     };
 
+    await this.activityLogService.log(ActivityAction.LOGIN, user.id, ipAddress);
     return {
       access_token: this.jwtService.sign(payload),
       message: 'Login successful',
@@ -158,11 +165,12 @@ export class AuthService {
   }
 
   // ─── Forgot Password ─────────────────────────────────────────────────────
-  async forgotPassword(email: string) {
+  async forgotPassword(email: string, ipAddress?: string) {
     const user = await this.userRepo.findOne({ where: { email } });
 
-    // Always return the same message to avoid user enumeration
-    const response = { message: 'If this email exists, a password reset link has been sent.' };
+    const response = {
+      message: 'If this email exists, a password reset link has been sent.',
+    };
     if (!user) return response;
 
     const token = uuidv4();
@@ -179,25 +187,40 @@ export class AuthService {
       user.passwordResetToken = null;
       user.passwordResetTokenExpiry = null;
       await this.userRepo.save(user);
-      throw new BadRequestException('Could not send password reset email. Please try again later.');
+      throw new BadRequestException(
+        'Could not send password reset email. Please try again later.',
+      );
     }
 
+    await this.activityLogService.log(ActivityAction.PASSWORD_RESET_REQUEST, user.id, ipAddress);
     return response;
   }
 
   // ─── Verify Reset Token ───────────────────────────────────────────────
   async verifyResetToken(token: string) {
-    const user = await this.userRepo.findOne({ where: { passwordResetToken: token } });
-    if (!user || !user.passwordResetTokenExpiry || new Date() > user.passwordResetTokenExpiry) {
+    const user = await this.userRepo.findOne({
+      where: { passwordResetToken: token },
+    });
+    if (
+      !user ||
+      !user.passwordResetTokenExpiry ||
+      new Date() > user.passwordResetTokenExpiry
+    ) {
       throw new BadRequestException('Invalid or expired password reset token');
     }
     return { message: 'Token is valid. You may now submit a new password.' };
   }
 
   // ─── Reset Password ───────────────────────────────────────────────────
-  async resetPassword(token: string, dto: ResetPasswordDto) {
-    const user = await this.userRepo.findOne({ where: { passwordResetToken: token } });
-    if (!user || !user.passwordResetTokenExpiry || new Date() > user.passwordResetTokenExpiry) {
+  async resetPassword(token: string, dto: ResetPasswordDto, ipAddress?: string) {
+    const user = await this.userRepo.findOne({
+      where: { passwordResetToken: token },
+    });
+    if (
+      !user ||
+      !user.passwordResetTokenExpiry ||
+      new Date() > user.passwordResetTokenExpiry
+    ) {
       throw new BadRequestException('Invalid or expired password reset token');
     }
 
@@ -206,6 +229,7 @@ export class AuthService {
     user.passwordResetTokenExpiry = null;
     await this.userRepo.save(user);
 
+    await this.activityLogService.log(ActivityAction.PASSWORD_CHANGE, user.id, ipAddress);
     return { message: 'Password has been reset successfully. You can now log in.' };
   }
 }

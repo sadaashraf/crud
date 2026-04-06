@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthService } from './auth.services';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -8,54 +9,46 @@ import { JwtAuthGuard } from './strategies/jwt.auth.guard';
 import { CurrentUser } from './strategies/user.decorator';
 import { EmailVerifiedGuard } from './strategies/emailVerify.guard';
 
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
-  // POST /auth/register — creates user + sends verification email
   @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  register(@Body() dto: RegisterDto, @Req() req: Request) {
+    return this.authService.register(dto, req.ip ?? req.socket.remoteAddress);
   }
 
-  // POST /auth/login — returns JWT (works even if unverified)
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    return this.authService.login(dto, req.ip ?? req.socket.remoteAddress);
   }
 
-  // GET /auth/verify-email/:token — user clicks link from email
   @Get('verify-email/:token')
   verifyEmail(@Param('token') token: string) {
     return this.authService.verifyEmail(token);
   }
 
-  // POST /auth/resend-verification — request a new verification email
   @Post('resend-verification')
   resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto);
   }
 
-  // POST /auth/forgot-password — send password reset link
   @Post('forgot-password')
-  forgotPassword(@Body('email') email: string) {
-    return this.authService.forgotPassword(email);
+  forgotPassword(@Body('email') email: string, @Req() req: Request) {
+    return this.authService.forgotPassword(email, req.ip ?? req.socket.remoteAddress);
   }
 
-  // GET /auth/reset-password/:token — verify reset token
   @Get('reset-password/:token')
   verifyResetToken(@Param('token') token: string) {
     return this.authService.verifyResetToken(token);
   }
 
-  // POST /auth/reset-password/:token — set new password
   @Post('reset-password/:token')
-  resetPassword(@Param('token') token: string, @Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(token, dto);
+  resetPassword(@Param('token') token: string, @Body() dto: ResetPasswordDto, @Req() req: Request) {
+    return this.authService.resetPassword(token, dto, req.ip ?? req.socket.remoteAddress);
   }
 
-  // ─── Example: route blocked until email is verified ───────────────────────
-  // Apply JwtAuthGuard first (checks token), then EmailVerifiedGuard (checks isEmailVerified)
   @Get('protected-feature')
   @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
   protectedFeature(@CurrentUser() user: any) {
