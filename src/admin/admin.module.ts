@@ -16,4 +16,4 @@ import { ActivityLogModule } from 'src/activity-log/activity-log.module';
   providers: [AdminService],
   controllers: [AdminController],
 })
-export class AdminModule {}
+export class AdminModule { }
