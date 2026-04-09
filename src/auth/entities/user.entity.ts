@@ -36,4 +36,6 @@ export class User {
 
   @Column({ type: 'timestamp', nullable: true })
   passwordResetTokenExpiry!: Date | null;
+
+
 }
