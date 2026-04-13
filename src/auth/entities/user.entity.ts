@@ -37,5 +37,26 @@ export class User {
   @Column({ type: 'timestamp', nullable: true })
   passwordResetTokenExpiry!: Date | null;
 
+  // ─── 2FA — Authenticator App ──────────────────────────────────────────────────
+  @Column({ default: false })
+  isTwoFactorEnabled!: boolean;
 
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  twoFactorSecret!: string | null;
+
+  // ─── 2FA — Email OTP ─────────────────────────────────────────────────────────
+  @Column({ default: false })
+  isEmailOtpEnabled!: boolean;
+
+  @Column({ type: 'varchar', length: 6, nullable: true })
+  emailOtpCode!: string | null;         // 6 digit code
+
+  @Column({ type: 'timestamp', nullable: true })
+  emailOtpExpiry!: Date | null;         // expires in 10 minutes
+
+  @CreateDateColumn()
+  createdAt!: Date;
 }
+
+
+

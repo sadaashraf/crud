@@ -9,6 +9,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategies/strategy';
 import { EmailModule } from 'src/email/email.module';
 import { ActivityLogModule } from 'src/activity-log/activity-log.module';
+import e from 'node_modules/@types/express';
+import { EmailOtpService } from './2fa.services';
 
 @Module({
   imports: [
@@ -24,7 +26,7 @@ import { ActivityLogModule } from 'src/activity-log/activity-log.module';
     EmailModule,
     ActivityLogModule,
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, EmailOtpService],
   controllers: [AuthController],
 })
 export class AuthModule { }

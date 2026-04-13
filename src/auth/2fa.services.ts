@@ -1,100 +1,126 @@
-// import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
-// import { InjectRepository } from '@nestjs/typeorm';
-// import { Repository } from 'typeorm';
-// import * as speakeasy from 'speakeasy';
-// import * as QRCode from 'qrcode';
-// import { User } from '../user/user.entity';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { EmailService } from '../email/email.service';
+import { User } from './entities/user.entity';
 
-// @Injectable()
-// export class TwoFactorService {
-//   constructor(
-//     @InjectRepository(User)
-//     private readonly userRepo: Repository<User>,
-//   ) {}
+@Injectable()
+export class EmailOtpService {
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+    private readonly emailService: EmailService,
+  ) { }
 
-//   // ─── Step 1: Generate secret + QR code for setup ──────────────────────────────
-//   async generateTwoFactorSecret(userId: number) {
-//     const user = await this.userRepo.findOne({ where: { id: userId } });
-//     if (!user) throw new BadRequestException('User not found');
+  // ─── Enable Email OTP for account ────────────────────────────────────────────
+  async enableEmailOtp(userId: number) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
 
-//     if (user.isTwoFactorEnabled) {
-//       throw new BadRequestException('2FA is already enabled for this account');
-//     }
+    if (user.isEmailOtpEnabled) {
+      throw new BadRequestException('Email OTP 2FA is already enabled');
+    }
 
-//     // Generate a secret key
-//     const secret = speakeasy.generateSecret({
-//       name: `NestAuth (${user.email})`,  // shown in authenticator app
-//       length: 20,
-//     });
+    user.isEmailOtpEnabled = true;
+    await this.userRepo.save(user);
 
-//     // Save secret temporarily (not enabled yet until verified)
-//     user.twoFactorSecret = secret.base32;
-//     await this.userRepo.save(user);
+    return {
+      message: 'Email OTP 2FA enabled. You will receive a code on every login.',
+    };
+  }
 
-//     // Generate QR code as base64 image — user scans this with Google Authenticator
-//     const qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url!);
+  // ─── Disable Email OTP ────────────────────────────────────────────────────────
+  async disableEmailOtp(userId: number, code: string) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+    if (!user.isEmailOtpEnabled) throw new BadRequestException('Email OTP is not enabled');
 
-//     return {
-//       secret: secret.base32,   // manual entry fallback
-//       qrCode: qrCodeDataUrl,   // scan this in authenticator app
-//       message: 'Scan the QR code with Google Authenticator or Authy, then call POST /auth/2fa/enable with the 6-digit code to activate 2FA',
-//     };
-//   }
+    // Must verify current OTP before disabling
+    await this.verifyOtp(userId, code);
 
-//   // ─── Step 2: Enable 2FA after user verifies the code ─────────────────────────
-//   async enableTwoFactor(userId: number, code: string) {
-//     const user = await this.userRepo.findOne({ where: { id: userId } });
-//     if (!user) throw new BadRequestException('User not found');
-//     if (!user.twoFactorSecret) throw new BadRequestException('Please call POST /auth/2fa/setup first');
-//     if (user.isTwoFactorEnabled) throw new BadRequestException('2FA is already enabled');
+    user.isEmailOtpEnabled = false;
+    user.emailOtpCode = null;
+    user.emailOtpExpiry = null;
+    await this.userRepo.save(user);
 
-//     // Verify the code matches the secret
-//     const isValid = this.verifyCode(user.twoFactorSecret, code);
-//     if (!isValid) {
-//       throw new UnauthorizedException('Invalid 2FA code. Please try again.');
-//     }
+    return { message: 'Email OTP 2FA disabled successfully.' };
+  }
 
-//     // Now officially enable 2FA
-//     user.isTwoFactorEnabled = true;
-//     await this.userRepo.save(user);
+  // ─── Send OTP during login ────────────────────────────────────────────────────
+  async sendLoginOtp(userId: number): Promise<void> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
 
-//     return { message: '2FA enabled successfully. You will need your authenticator app on every login.' };
-//   }
+    // Generate 6 digit random OTP
+    const otp = this.generateOtp();
 
-//   // ─── Step 3: Verify 2FA code during login ────────────────────────────────────
-//   async verifyTwoFactorCode(userId: number, code: string): Promise<boolean> {
-//     const user = await this.userRepo.findOne({ where: { id: userId } });
-//     if (!user || !user.twoFactorSecret) return false;
+    // Expires in 10 minutes
+    const expiry = new Date();
+    expiry.setMinutes(expiry.getMinutes() + 10);
 
-//     return this.verifyCode(user.twoFactorSecret, code);
-//   }
+    // Save OTP to DB
+    user.emailOtpCode = otp;
+    user.emailOtpExpiry = expiry;
+    await this.userRepo.save(user);
 
-//   // ─── Disable 2FA ──────────────────────────────────────────────────────────────
-//   async disableTwoFactor(userId: number, code: string) {
-//     const user = await this.userRepo.findOne({ where: { id: userId } });
-//     if (!user) throw new BadRequestException('User not found');
-//     if (!user.isTwoFactorEnabled) throw new BadRequestException('2FA is not enabled');
+    // Send via SendGrid
+    await this.emailService.sendOtpEmail(user.email, otp);
+  }
 
-//     // Must verify current code before disabling
-//     const isValid = this.verifyCode(user.twoFactorSecret!, code);
-//     if (!isValid) {
-//       throw new UnauthorizedException('Invalid 2FA code');
-//     }
+  // ─── Verify OTP ───────────────────────────────────────────────────────────────
+  async verifyOtp(userId: number, code: string): Promise<boolean> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
 
-//     user.isTwoFactorEnabled = false;
-//     user.twoFactorSecret = null;
-//     await this.userRepo.save(user);
+    // No OTP generated yet
+    if (!user.emailOtpCode || !user.emailOtpExpiry) {
+      throw new BadRequestException(
+        'No OTP found. Please login again to receive a new code.',
+      );
+    }
 
-//     return { message: '2FA disabled successfully.' };
-//   }
+    // Check expiry
+    if (new Date() > user.emailOtpExpiry) {
+      // Clear expired OTP
+      user.emailOtpCode = null;
+      user.emailOtpExpiry = null;
+      await this.userRepo.save(user);
+      throw new BadRequestException(
+        'OTP has expired. Please login again to receive a new code.',
+      );
+    }
 
-//   // ─── Core TOTP verification ───────────────────────────────────────────────────
-//   private verifyCode(secret: string, code: string): boolean {
-//     return speakeasy.totp.verify({
-//       secret,
-//       encoding: 'base32',
-//       token: code,
-//       window: 1,  // allow 30 seconds clock drift (1 step before/after)
-//     });
-//   }
-// }
+    // Check code matches
+    if (user.emailOtpCode !== code) {
+      throw new UnauthorizedException('Invalid OTP code. Please try again.');
+    }
+
+    // ✅ Valid — clear OTP (one-time use)
+    user.emailOtpCode = null;
+    user.emailOtpExpiry = null;
+    await this.userRepo.save(user);
+
+    return true;
+  }
+
+  // ─── Resend OTP ───────────────────────────────────────────────────────────────
+  async resendOtp(userId: number): Promise<{ message: string }> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+    if (!user.isEmailOtpEnabled) throw new BadRequestException('Email OTP is not enabled');
+
+    await this.sendLoginOtp(userId);
+
+    return { message: 'A new OTP has been sent to your email.' };
+  }
+
+  // ─── Generate 6 digit OTP ─────────────────────────────────────────────────────
+  private generateOtp(): string {
+    // Generates a random 6 digit number e.g. "048291"
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+}
